@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables (Crucial for security!)
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Flask/Instance folder
+instance/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
