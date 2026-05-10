@@ -1,0 +1,65 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # web — the Flask/gunicorn application
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: paribus-hospital:latest
+
+    container_name: paribus-hospital-web
+
+    command: >
+      gunicorn wsgi:app
+      --workers 2
+      --bind 0.0.0.0:8000
+      --access-logfile -
+      --error-logfile -
+      --log-level info
+      --timeout 120
+
+    restart: unless-stopped
+
+    ports:
+      # HOST:CONTAINER — change the left side to run on a different host port.
+      - "8000:8000"
+
+    environment:
+      - HOSPITAL_API_URL=${HOSPITAL_API_URL:-https://hospital-directory.onrender.com}
+      - MAX_CSV_ROWS=${MAX_CSV_ROWS:-20}
+      - PORT=8000
+      - FLASK_DEBUG=${FLASK_DEBUG:-false}
+
+    # Values in .env are picked up automatically by Compose.
+    env_file:
+      - .env
+
+    # ── health check ──────────────────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+    # ── resource limits ───────────────────────────────────────────────────────
+    # Prevent the container from consuming all host memory on a runaway request.
+    # Matches Render's free-tier limits so local behaviour mirrors production.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+    # ── logging ───────────────────────────────────────────────────────────────
+    # json-file driver with rotation keeps logs from filling the host disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
