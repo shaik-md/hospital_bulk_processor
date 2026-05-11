@@ -1,0 +1,213 @@
+openapi: 3.0.3
+info:
+  title: Paribus Hospital Bulk Processor API
+  version: 1.0.0
+  description: API for bulk creating, validating, and resuming hospital records via CSV upload.
+servers:
+  - url: https://paribus-hospital-processor.onrender.com
+    description: Production Server
+  - url: http://localhost:5000
+    description: Local Development Server
+
+paths:
+  /hospitals/bulk:
+    post:
+      summary: Bulk Create Hospitals
+      description: |
+        Upload a CSV file to bulk-create up to 20 hospital records concurrently. 
+        Supports stateless idempotent retries and resuming partially failed batches via the optional `batch_id` parameter.
+      tags:
+        - Bulk Processing
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: UTF-8 encoded CSV file containing `name` and `address` columns. Maximum size 1MB.
+                batch_id:
+                  type: string
+                  format: uuid
+                  description: Optional UUID. If provided, skips records that already exist for this batch. Used for resuming failures.
+      responses:
+        '201':
+          description: Created. Batch processed and activated successfully. All records created or already exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResponse'
+        '207':
+          description: Multi-Status. Batch processing partially completed. Some records failed. Resume required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartialBulkResponse'
+        '400':
+          description: Bad Request (Missing file, structural CSV validation error, or empty file).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Payload Too Large (File exceeds 1MB limit).
+        '415':
+          description: Unsupported Media Type (File extension is not .csv).
+        '500':
+          description: Internal Server Error.
+
+  /hospitals/bulk/validate:
+    post:
+      summary: Validate CSV Upload
+      description: Dry-run endpoint to validate the structure and content of a CSV file without communicating with the upstream database. Gathers all row-level errors for a single fix-it cycle.
+      tags:
+        - Validation
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: UTF-8 encoded CSV file to validate.
+      responses:
+        '200':
+          description: Success. CSV is fully valid and ready for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationReport'
+        '422':
+          description: Unprocessable Entity. Validation errors found within the CSV.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationReport'
+        '400':
+          description: Bad Request (Missing file or empty file).
+        '413':
+          description: Payload Too Large.
+        '415':
+          description: Unsupported Media Type.
+
+components:
+  schemas:
+    BulkResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Batch processed and activated successfully
+        data:
+          $ref: '#/components/schemas/BulkResultData'
+
+    PartialBulkResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Batch processing partially completed. Resume required.
+        resume_instructions:
+          type: string
+          example: Re-submit the exact same CSV using the provided batch_id in the form data.
+        data:
+          $ref: '#/components/schemas/BulkResultData'
+
+    BulkResultData:
+      type: object
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        total_hospitals:
+          type: integer
+          example: 20
+        processed_hospitals:
+          type: integer
+          example: 20
+        failed_hospitals:
+          type: integer
+          example: 0
+        processing_time_seconds:
+          type: number
+          format: float
+          example: 0.85
+        batch_activated:
+          type: boolean
+          example: true
+        hospitals:
+          type: array
+          items:
+            $ref: '#/components/schemas/HospitalResult'
+
+    HospitalResult:
+      type: object
+      properties:
+        row:
+          type: integer
+        hospital_id:
+          type: integer
+          nullable: true
+        name:
+          type: string
+        status:
+          type: string
+          enum: [created_and_activated, already_active, resumed_existing, created, failed]
+        reason:
+          type: string
+          description: Populated if status is 'failed'.
+
+    ValidationReport:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        total_rows:
+          type: integer
+        valid_rows:
+          type: integer
+        invalid_rows:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+                nullable: true
+              field:
+                type: string
+                nullable: true
+              issue:
+                type: string
+        preview:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              name:
+                type: string
+              address:
+                type: string
+              phone:
+                type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "CSV exceeds the 20-hospital limit. Found: 25."

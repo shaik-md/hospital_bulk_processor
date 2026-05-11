@@ -57,13 +57,13 @@ def create_app(config: Optional[dict] = None) -> Flask:
 
     # ── swagger ui ────────────────────────────────────────────────────────────
     SWAGGER_URL = '/api/docs'
-    API_URL = '/static/openapi.yaml'  # Points to the file we moved in Step 2
+    API_URL = '/static/openapi.yaml'
 
     swaggerui_blueprint = get_swaggerui_blueprint(
         SWAGGER_URL,
         API_URL,
         config={
-            'app_name': "Paribus Hospital Bulk Processor API"
+            'app_name': "Hospital Bulk Processor API"
         }
     )
     app.register_blueprint(swaggerui_blueprint)
