@@ -13,6 +13,7 @@ Performance note — httpx.AsyncClient lifecycle:
     Connection-level performance is still gained within a single bulk request
     because all 20 hospital POSTs share one client and its connection pool.
 """
+from flask_swagger_ui import get_swaggerui_blueprint
 
 import logging
 import logging.config
@@ -53,6 +54,19 @@ def create_app(config: Optional[dict] = None) -> Flask:
     # Import here to avoid circular imports at module load time.
     from src.routes import hospitals_bp  # noqa: PLC0415
     app.register_blueprint(hospitals_bp)
+
+    # ── swagger ui ────────────────────────────────────────────────────────────
+    SWAGGER_URL = '/api/docs'
+    API_URL = '/static/openapi.yaml'  # Points to the file we moved in Step 2
+
+    swaggerui_blueprint = get_swaggerui_blueprint(
+        SWAGGER_URL,
+        API_URL,
+        config={
+            'app_name': "Paribus Hospital Bulk Processor API"
+        }
+    )
+    app.register_blueprint(swaggerui_blueprint)
 
     # ── global error handlers ─────────────────────────────────────────────────
     @app.errorhandler(404)
